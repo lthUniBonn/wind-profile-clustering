@@ -73,7 +73,8 @@ def plot_diff_pdf(data, wind_orientation, diff_type, output_file_name='diff_pdf_
         plt.xlabel('{} diff for v {}'.format(diff_type, wind_orientation))
     plt.ylabel('frequency')
     txt_x_pos = plt.xlim()[1]*0.1
-    plt.text(txt_x_pos, plt.ylim()[1]*0.9, 'mean: {:.2E} +- {:.2E}'.format(np.mean(data), np.std(data)), color='r')
+    plt.text(txt_x_pos, plt.ylim()[1]*0.9, '{} data points'.format(len(data)))
+    plt.text(txt_x_pos, plt.ylim()[1]*0.8, 'mean: {:.2E} +- {:.2E}'.format(np.mean(data), np.std(data)), color='r')
     plt.title(title)
     if not plots_interactive:
         plt.savefig(output_file_name)
@@ -143,10 +144,10 @@ def plot_height_vs_diffs(heights, wind_orientation, diff_type, n_pcs, plot_info,
 
     if not plots_interactive:
         if len(cluster_mean) != 0:
-            plt.savefig(result_dir + '{}_wind_{}_cluster_{}_diff_vs_height_{}_pcs'.format(
-                wind_orientation, n_clusters, diff_type, n_pcs) + plot_info + '.pdf')
+            plt.savefig(result_dir + '{}_cluster/{}_wind_{}_cluster_{}_diff_vs_height_{}_pcs'.format(
+                n_clusters, wind_orientation, n_clusters, diff_type, n_pcs) + plot_info + '.pdf')
         else:
-            plt.savefig(result_dir + '{}_wind_{}_diff_vs_height_{}_pcs'.format(
+            plt.savefig(result_dir + 'pc_only/{}_wind_{}_diff_vs_height_{}_pcs'.format(
                 wind_orientation, diff_type, n_pcs) + plot_info + '.pdf')
 
         # Clear plots after saving, otherwise plotted on top of each other
@@ -279,6 +280,17 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
     heights = wind_data['altitude']
     n_altitudes = len(heights)
 
+    # test dependence of differences on velocity range
+    split_velocities = [0, 3, 5, 10, 20, 0]  # TODO not elegant, fix!
+    vel_res_dict = {'cluster': {'relative': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True),
+                                'absolute': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True)},
+                    'pc': {'relative': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True),
+                           'absolute': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True)}
+                    }
+    vel_res = {}
+    for eval_wind_type in wind_type_eval_only:
+        vel_res[eval_wind_type] = vel_res_dict
+
     for n in range(n_features):
         n = n+1
 
@@ -316,13 +328,13 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
 
         # ---- Plotting - pdfs and height evaluation
         if n in eval_pcs:
+            print('    Performing detailed analysis and plotting')
             # Define heights to be plotted - no heights given, evaluate all
             if eval_heights == []:
                 eval_heights = heights
             for wind_orientation in pc_differences:
                 if wind_orientation not in wind_type_eval_only:
                     continue
-
                 for diff_type, val in pc_differences[wind_orientation].items():
                     pc_val = pc_full_diffs[wind_orientation][diff_type]
                     pc_mean, pc_std = val
@@ -334,18 +346,36 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
                     for height_idx, height in enumerate(heights):
                         if height not in eval_heights:
                             continue
-                        if n_clusters > 0:
-                            plot_diff_pdf(cluster_val[:, height_idx], wind_orientation, diff_type,
-                                          output_file_name=(result_dir + '{}_wind_{}_cluster_{}_diff_pdf_height_{}_{}_pcs'.format(
-                                              wind_orientation, n_clusters, diff_type, height, n) + data_info + '.pdf'),
-                                          title='cluster {} difference {} wind data with {} pcs at {} m'.format(
-                                              diff_type, wind_orientation, n, height))
-                        else:
-                            plot_diff_pdf(pc_val[:, height_idx], wind_orientation, diff_type,
-                                          output_file_name=(result_dir + '{}_wind_{}_diff_pdf_height_{}_{}_pcs'.format(
-                                              wind_orientation, diff_type, height, n) + data_info + '.pdf'),
-                                          title='{} difference {} wind data with {} pcs at {} m'.format(
-                                              diff_type, wind_orientation, n, height))
+
+                        # find mask
+                        wind_speed = wind_data['wind_speed'][:, height_idx]
+                        for vel_idx, vel in enumerate(split_velocities):
+                            if vel_idx in [len(split_velocities)-2, len(split_velocities)-1]:
+                                vel_mask = wind_speed >= vel
+                                vel_tag = '_vel_{}_up'.format(vel)
+                            else:
+                                vel_mask = (wind_speed >= vel) * (wind_speed < split_velocities[vel_idx+1])
+                                vel_tag = '_vel_{}_to_{}'.format(vel, split_velocities[vel_idx+1])
+                            if np.sum(vel_mask) < 5:
+                                print(' '.join(vel_tag.split('_')), 'm/s: less than 5 matches found, skipping')
+                                continue
+
+                            if n_clusters > 0:
+                                cluster_value = cluster_val[:, height_idx][vel_mask]
+                                vel_res[wind_orientation]['cluster'][diff_type][eval_heights.index(height), eval_pcs.index(n), vel_idx, :] = (np.mean(cluster_value), np.std(cluster_value))
+                                plot_diff_pdf(cluster_value, wind_orientation, diff_type,
+                                              output_file_name=(result_dir + '{}_cluster/{}_wind_{}_cluster_{}_diff_pdf_height_{}_{}_pcs'.format(
+                                                  n_clusters, wind_orientation, n_clusters, diff_type, height, n) + vel_tag + data_info + '.pdf'),
+                                              title=' '.join(vel_tag.split('_')) + ' cluster {} difference {} wind data with {} pcs at {} m'.format(
+                                                  diff_type, wind_orientation, n, height))
+                            else:
+                                pc_value = pc_val[:, height_idx][vel_mask]
+                                vel_res[wind_orientation]['pc'][diff_type][eval_heights.index(height), eval_pcs.index(n), vel_idx, :] = (np.mean(pc_value), np.std(pc_value))
+                                plot_diff_pdf(pc_value, wind_orientation, diff_type,
+                                              output_file_name=(result_dir + 'pc_only/{}_wind_{}_diff_pdf_height_{}_{}_pcs'.format(
+                                                  wind_orientation, diff_type, height, n) + vel_tag + data_info + '.pdf'),
+                                              title=' '.join(vel_tag.split('_')) + ' {} difference {} wind data with {} pcs at {} m'.format(
+                                                  diff_type, wind_orientation, n, height))
                     # Plot height vs differences
                     if n_clusters > 0:
                         plot_height_vs_diffs(heights, wind_orientation, diff_type, n, data_info,
@@ -369,6 +399,56 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
                     n_pc_dependence[wind_orientation][diff_type][n-1, :, :] = cluster_differences[wind_orientation][diff_type]
                 else:
                     n_pc_dependence[wind_orientation][diff_type][n-1, :, :] = val
+
+    # ---- Plot velocity dependence vs n_pc
+    for wind_orientation in vel_res:
+        for fit_type in vel_res[wind_orientation]:
+            if fit_type == 'cluster' and n_clusters == 0: continue
+            elif fit_type == 'pc' and n_clusters > 0: continue
+            for diff_type in vel_res[wind_orientation][fit_type]:
+                for height_idx, height in enumerate(eval_heights):
+                    if height not in eval_heights: # TODO redundant
+                        continue
+                    x = np.array(range(len(split_velocities)))
+
+                    plt.xlabel('velocity ranges in m/s')
+                    if diff_type == 'absolute':
+                        plt.ylabel('{} diff for v {} in m/s'.format(diff_type, wind_orientation))
+                    else:
+                        plt.ylabel('{} diff for v {}'.format(diff_type, wind_orientation))
+
+                    plot_dict = {}
+                    for pc_idx, n_pcs in enumerate(eval_pcs):
+                        y = vel_res[wind_orientation][fit_type][diff_type][height_idx, pc_idx, :, 0]
+                        dy = vel_res[wind_orientation][fit_type][diff_type][height_idx, pc_idx, :, 1]
+                        if len(eval_pcs) > 1:
+                            shift = -0.25 + 0.5/(len(eval_pcs)-1) * pc_idx
+                        else:
+                            shift = 0
+                        shifted_x = x+shift
+                        use_only = y.mask == False
+                        y = y[use_only]
+                        dy = dy[use_only]
+                        shifted_x = shifted_x[use_only]
+                        plot_dict[n_pcs] = plt.errorbar(shifted_x, y, yerr=dy, fmt='+')
+                    ax = plt.axes()
+                    ax.set_xticks(x)
+                    ax.set_xticklabels(['0-3', '3-5', '5-10', '10-20', '20 up', 'full']) # TODO This can be done much better
+                    legend_list = [plot_item for key, plot_item in plot_dict.items()]
+                    legend_names = ['{} pcs'.format(key) for key in plot_dict]
+
+                    plt.legend(legend_list, legend_names)
+                    if n_clusters > 0:
+                        plt.title('{} diff of v {} at {} m using {} {}'.format(diff_type, wind_orientation, height, n_clusters, fit_type))
+                        plt.savefig(result_dir + '{}_cluster/{}_wind_{}_{}_{}_diff_vs_velocity_ranges_{}_m'.format(
+                                    n_clusters, wind_orientation, n_clusters, fit_type, diff_type, height) + data_info + '.pdf')
+                    else:
+                        plt.title('{} diff of v {} at {} m using {}'.format(diff_type, wind_orientation, height, fit_type))
+                        plt.savefig(result_dir + 'pc_only/{}_wind_{}_{}_diff_vs_velocity_ranges_{}_m'.format(
+                                    wind_orientation, fit_type, diff_type, height) + data_info + '.pdf')
+                    # Clear plots after saving, otherwise plotted on top of each other
+                    plt.cla()
+                    plt.clf()
 
     return n_pc_dependence
 
@@ -466,13 +546,17 @@ def evaluate_pc_analysis(wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heig
                 else:
                     # Plot number of pcs dependence comparing all analyses with number of clusters given in eval_clusters
                     plot_dict = {}
-                    for n_clusters in n_cluster_dependence:
+                    for n_cluster_idx, n_clusters in enumerate(n_cluster_dependence):
                         y = n_cluster_dependence[n_clusters][wind_orientation][diff_type][2:, 0, height_idx]
                         dy = n_cluster_dependence[n_clusters][wind_orientation][diff_type][2:, 1, height_idx]
-                        plot_dict[n_clusters] = plt.errorbar(x, y, yerr=dy, fmt='+', alpha=0.5)
+                        shift = -0.25 + 0.5/(len(n_cluster_dependence)) * n_cluster_idx
+                        plot_dict[n_clusters] = plt.errorbar(x+shift, y, yerr=dy, fmt='+')
+                    ax = plt.axes()
+                    ax.set_xticks(x)
+
                     legend_list = [plot_item for key, plot_item in plot_dict.items()]
                     legend_names = ['{} clusters'.format(key) for key, plot_item in plot_dict.items()]
-                    pc = plt.errorbar(x, y_pc, yerr=dy_pc, fmt='+', color='b')
+                    pc = plt.errorbar(x+0.25, y_pc, yerr=dy_pc, fmt='+', color='b')
                     legend_list.insert(0, pc)
                     legend_names.insert(0, 'pc only')
                     plt.legend(legend_list, legend_names)
@@ -489,8 +573,8 @@ if __name__ == '__main__':
     wind_data = preprocess_data(wind_data)
 
     # Evaluate performance of pcs and clusters
-    evaluate_pc_analysis(wind_data, data_info, eval_pcs=[3, 5, 7, 21], eval_heights=[20, 100, 300, 500, 600],
-                         eval_clusters=[8], eval_n_pc_up_to=7)
+    evaluate_pc_analysis(wind_data, data_info, eval_pcs=[3, 5, 7, 9, 12], eval_heights=[300, 500, 600],
+                         eval_clusters=[5, 8, 15, 30], eval_n_pc_up_to=12)
 
     if plots_interactive:
         plt.show()

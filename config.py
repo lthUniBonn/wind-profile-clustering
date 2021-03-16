@@ -25,7 +25,7 @@ use_data_opts = ['DOWA', 'LIDAR', 'ERA5']
 use_data = use_data_opts[0]
 
 
-# See plots interactively - don't save plots directly as pdf to result_dir
+# See plots interactively abs_wind_pc_relative_diff_vs_velocity_ranges_20_m_lat_52.85_lon_3.43_DOWA_2010_2017.pdf- don't save plots directly as pdf to result_dir
 plots_interactive = False
 result_dir = "../clustering_results/" + use_data + "/"
 
