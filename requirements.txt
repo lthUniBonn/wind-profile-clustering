@@ -5,6 +5,7 @@ numpy
 scipy
 matplotlib
 pandas
+dask
 netcdf4
 xarray
 scikit-learn
