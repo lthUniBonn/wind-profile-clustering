@@ -1,17 +1,25 @@
 from sklearn.decomposition import PCA
+
 import numpy as np
 import numpy.ma as ma
+
+import os
 
 import matplotlib as mpl
 
 from config import plots_interactive, result_dir
+from config import validation_type, do_normalize_data, make_result_subdirs
 
 if not plots_interactive:
     mpl.use('Pdf')
 import matplotlib.pyplot as plt
 
 from read_requested_data import get_wind_data
-from wind_profile_clustering import cluster_normalized_wind_profiles_pca
+from wind_profile_clustering import cluster_normalized_wind_profiles_pca, predict_cluster
+
+import warnings
+from matplotlib.cbook import MatplotlibDeprecationWarning
+warnings.filterwarnings("ignore", category=MatplotlibDeprecationWarning)
 
 
 def get_weights_from_heights(heights):
@@ -74,7 +82,7 @@ def plot_diff_pdf(data, wind_orientation, diff_type, output_file_name='diff_pdf_
     plt.ylabel('frequency')
     txt_x_pos = plt.xlim()[1]*0.1
     plt.text(txt_x_pos, plt.ylim()[1]*0.9, '{} data points'.format(len(data)))
-    plt.text(txt_x_pos, plt.ylim()[1]*0.8, 'mean: {:.2E} +- {:.2E}'.format(np.mean(data), np.std(data)), color='r')
+    plt.text(txt_x_pos, plt.ylim()[1]*0.8, 'mean: {:.2E} +- {:.2E}'.format(np.mean(data), np.std(data)), color='tab:orange')
     plt.title(title)
     if not plots_interactive:
         plt.savefig(output_file_name)
@@ -119,28 +127,32 @@ def plot_height_vs_diffs(heights, wind_orientation, diff_type, n_pcs, plot_info,
     y = heights
     pc = plt.errorbar(pc_mean, y, xerr=pc_std, fmt='+')
     txt_x_pos = plt.xlim()[1]*0.1
-    plt.text(txt_x_pos, y[-1]-(y[-1]-y[-2])*0.3, 'mean: {:.2E} +- {:.2E}'.format(np.mean(pc_mean), np.mean(pc_std)), color='b')
+    plt.text(txt_x_pos, y[-1]-(y[-1]-y[-2])*0.3, 'mean: {:.2E} +- {:.2E}'.format(np.mean(pc_mean), np.mean(pc_std)), color='tab:blue')
     # Calculate weighted mean depending on height difference covered (half difference to top and to bottom, starting at 0)
     weights = get_weights_from_heights(heights)
     plt.text(txt_x_pos, y[-1]-(y[-1]-y[-2])*0.7, 'w-mean: {:.2E} +- {:.2E}'.format(
-        np.average(pc_mean, weights=weights), np.average(pc_std, weights=weights)), color='b')
+        np.average(pc_mean, weights=weights), np.average(pc_std, weights=weights)), color='tab:blue')
 
     if n_clusters > 0:
         cluster = plt.errorbar(cluster_mean, y, xerr=cluster_std, fmt='+', alpha=0.5)
         plt.text(txt_x_pos, y[-1]-(y[-1]-y[-2])*1.3, 'mean: {:.2E} +- {:.2E}'.format(np.mean(cluster_mean), np.mean(cluster_std)),
-                 color='r')
+                 color='tab:orange')
         plt.text(txt_x_pos, y[-1]-(y[-1]-y[-2])*1.7, 'w-mean: {:.2E} +- {:.2E}'.format(
             np.average(cluster_mean, weights=weights), np.average(cluster_std, weights=weights)),
-            color='r')
+            color='tab:orange')
         plt.legend((pc, cluster), ('pc', 'cluster'), loc='center right')
 
     plt.grid()
     if diff_type == 'absolute':
         plt.xlabel('{} diff for v {} in m/s'.format(diff_type, wind_orientation))
+        plt.xlim((-1.5,1.5))
     else:
         plt.xlabel('{} diff for v {}'.format(diff_type, wind_orientation))
+        plt.xlim((-0.6,0.6))
     plt.ylabel('height in m')
     plt.title('{} difference {} wind data with {} pcs'.format(diff_type, wind_orientation, n_pcs))
+
+    
 
     if not plots_interactive:
         if len(cluster_mean) != 0:
@@ -251,7 +263,7 @@ def get_diffs_reco(original, abs_wind_speed, reco, n_altitudes, sample_norm=[],
     return diffs_sample_mean, diffs
 
 
-def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_heights=[], wind_type_eval_only=['abs']):
+def eval_all_pcs(n_features, eval_pcs, wind_data_training, wind_data, data_info, n_clusters=0, eval_heights=[], wind_type_eval_only=['abs']):
     """Fully evaluate a clustering analysis for a range of principal components.
 
     Parameters
@@ -260,8 +272,10 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
         Maximal number of principal components to be analysed.
     eval_pcs : list
         Number of principal components to be analysed in detail.
+    wind_data_training : array
+        Wind speed data to be used for the pc training and clustering, for parallel/perpendicular winds for an altitude range. 
     wind_data : array
-        Wind speed data for parallel/perpendicular winds for an altitude range.
+        Wind speed data to be compared with its reconstruction, for parallel/perpendicular winds for an altitude range.
     data_info : string
         Location/data source information to be included in output file names.
     n_clusters : int, optional
@@ -281,7 +295,7 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
     n_altitudes = len(heights)
 
     # test dependence of differences on velocity range
-    split_velocities = [0, 3, 5, 10, 20, 0]  # TODO not elegant, fix!
+    split_velocities = [0, 3, 5, 10, 20, 0]  #  defining the ranges to the next element, second to last till maximum velocity, the last 0 refers to full sample
     vel_res_dict = {'cluster': {'relative': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True),
                                 'absolute': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True)},
                     'pc': {'relative': ma.array(np.zeros((len(eval_heights), len(eval_pcs), len(split_velocities), 2)), mask=True),
@@ -292,28 +306,34 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
         vel_res[eval_wind_type] = vel_res_dict
 
     for n in range(n_features):
-        n = n+1
-
+        n = n+1 
         # ---- Principal component analysis
         # Do pca and back transformation
+        # Train pcs on training data
         pca = PCA(n_components=n)
-        training_data_pc = pca.fit_transform(wind_data['training_data'])
-        print("Components reduced from {} to {}.".format(wind_data['training_data'].shape[1], pca.n_components_))
+        pca.fit(wind_data_training['training_data'])
+        print("Components reduced from {} to {}.".format(wind_data_training['training_data'].shape[1], pca.n_components_))
 
-        training_data_back_pc = pca.inverse_transform(training_data_pc)
+        # Pca transform original data and back-transform again
+        data_pc = pca.transform(wind_data['training_data'])
+        data_back_pc = pca.inverse_transform(data_pc)
 
+        # Find differences between reconstructed and 
         pc_differences, pc_full_diffs = get_diffs_reco(wind_data['training_data'], wind_data['wind_speed'],
-                                                       training_data_back_pc, n_altitudes,
+                                                       data_back_pc, n_altitudes,
                                                        sample_norm=wind_data['normalisation_value'],
                                                        wind_type_eval_only=wind_type_eval_only)
 
         # ---- Clustering
         if n_clusters > 0:
             # Run clustering with n_clusters and n_pcs
-            res = cluster_normalized_wind_profiles_pca(wind_data['training_data'], n_clusters, n_pcs=n)
+            res = cluster_normalized_wind_profiles_pca(wind_data_training['training_data'], n_clusters, n_pcs=n)
             # Normalised parallel and perpendicular cluster wind speeds for each of the n_clusters
             prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
-            labels = res['sample_labels']
+
+            labels, frequency_clusters = predict_cluster(wind_data['training_data'], n_clusters,
+                                                         res['data_processing_pipeline'].predict, res['cluster_mapping'])
+
             cluster_reco_data = np.zeros(wind_data['training_data'].shape)
             # Fill reco data array with assigned cluster wind profile
             for i_cluster in range(n_clusters):
@@ -344,6 +364,9 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
 
                     # Plot PDFs: Distribution of differences for each height.
                     for height_idx, height in enumerate(heights):
+                        if n in [1, 2, 3, 4, 12] : 
+                            if height_idx == 0: print("    Excluding pc from pdf plotting, not needed for all evaluated pcs")
+                            continue
                         if height not in eval_heights:
                             continue
 
@@ -364,7 +387,7 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
                                 cluster_value = cluster_val[:, height_idx][vel_mask]
                                 vel_res[wind_orientation]['cluster'][diff_type][eval_heights.index(height), eval_pcs.index(n), vel_idx, :] = (np.mean(cluster_value), np.std(cluster_value))
                                 plot_diff_pdf(cluster_value, wind_orientation, diff_type,
-                                              output_file_name=(result_dir + '{}_cluster/{}_wind_{}_cluster_{}_diff_pdf_height_{}_{}_pcs'.format(
+                                              output_file_name=(result_dir + '{}_cluster/diff_vel_pdf/{}_wind_{}_cluster_{}_diff_pdf_height_{}_{}_pcs'.format(
                                                   n_clusters, wind_orientation, n_clusters, diff_type, height, n) + vel_tag + data_info + '.pdf'),
                                               title=' '.join(vel_tag.split('_')) + ' cluster {} difference {} wind data with {} pcs at {} m'.format(
                                                   diff_type, wind_orientation, n, height))
@@ -372,7 +395,7 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
                                 pc_value = pc_val[:, height_idx][vel_mask]
                                 vel_res[wind_orientation]['pc'][diff_type][eval_heights.index(height), eval_pcs.index(n), vel_idx, :] = (np.mean(pc_value), np.std(pc_value))
                                 plot_diff_pdf(pc_value, wind_orientation, diff_type,
-                                              output_file_name=(result_dir + 'pc_only/{}_wind_{}_diff_pdf_height_{}_{}_pcs'.format(
+                                              output_file_name=(result_dir + 'pc_only/diff_vel_pdf/{}_wind_{}_diff_pdf_height_{}_{}_pcs'.format(
                                                   wind_orientation, diff_type, height, n) + vel_tag + data_info + '.pdf'),
                                               title=' '.join(vel_tag.split('_')) + ' {} difference {} wind data with {} pcs at {} m'.format(
                                                   diff_type, wind_orientation, n, height))
@@ -407,8 +430,6 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
             elif fit_type == 'pc' and n_clusters > 0: continue
             for diff_type in vel_res[wind_orientation][fit_type]:
                 for height_idx, height in enumerate(eval_heights):
-                    if height not in eval_heights: # TODO redundant
-                        continue
                     x = np.array(range(len(split_velocities)))
 
                     plt.xlabel('velocity ranges in m/s')
@@ -431,9 +452,9 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
                         dy = dy[use_only]
                         shifted_x = shifted_x[use_only]
                         plot_dict[n_pcs] = plt.errorbar(shifted_x, y, yerr=dy, fmt='+')
-                    ax = plt.axes()
+                    ax = plt.axes()  # This triggers a deprecation warning, works either way, ignore
                     ax.set_xticks(x)
-                    ax.set_xticklabels(['0-3', '3-5', '5-10', '10-20', '20 up', 'full']) # TODO This can be done much better
+                    ax.set_xticklabels(['0-3', '3-5', '5-10', '10-20', '20 up', 'full'])
                     legend_list = [plot_item for key, plot_item in plot_dict.items()]
                     legend_names = ['{} pcs'.format(key) for key in plot_dict]
 
@@ -453,14 +474,16 @@ def eval_all_pcs(n_features, eval_pcs, wind_data, data_info, n_clusters=0, eval_
     return n_pc_dependence
 
 
-def evaluate_pc_analysis(wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heights=[100, 300, 500],
+def evaluate_pc_analysis(wind_data_training, wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heights=[100, 300, 500],
                          eval_clusters=[], eval_n_pc_up_to=-1):
     """Fully evaluate multiple clustering analyses for a range of principal components.
 
     Parameters
     ----------
+    wind_data_training : array
+        Wind speed data to be used for the pc training and clustering, for parallel/perpendicular winds for an altitude range. 
     wind_data : array
-        Wind speed data for parallel/perpendicular winds for an altitude range.
+        Wind speed data to be compared with its reconstruction, for parallel/perpendicular winds for an altitude range.
     data_info : string
         Location/data source information to be included in output file names.
     eval_pcs : list
@@ -485,19 +508,19 @@ def evaluate_pc_analysis(wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heig
 
     # pc evaluation for #pc up to eval_n_pc_up_to
     print('pc only:')
-    n_pc_dependence = eval_all_pcs(eval_n_pc_up_to, eval_pcs, wind_data, data_info, eval_heights=eval_heights, n_clusters=0)
+    n_pc_dependence = eval_all_pcs(eval_n_pc_up_to, eval_pcs, wind_data_training, wind_data, data_info, eval_heights=eval_heights, n_clusters=0)
 
     # cluster evaluation for #pc up to eval_n_pc_up_to
     if len(eval_clusters) != 0:
         n_cluster_dependence = {}
         for cluster_idx, n_clusters in enumerate(eval_clusters):
             print('evaluate {} cluster analysis'.format(n_clusters))
-            n_cluster_dependence[n_clusters] = eval_all_pcs(eval_n_pc_up_to, eval_pcs, wind_data, data_info,
+            n_cluster_dependence[n_clusters] = eval_all_pcs(eval_n_pc_up_to, eval_pcs, wind_data_training, wind_data, data_info,
                                                             eval_heights=eval_heights, n_clusters=n_clusters)
 
     # Compare to representation by sample mean
-    sample_mean = np.mean(wind_data['wind_speed'], axis=0)
-    print(sample_mean)
+    sample_mean = np.mean(wind_data_training['wind_speed'], axis=0)
+    print('sample mean: ', sample_mean)
     sample_mean_dict = {
         'abs': {
             'absolute': (np.mean(wind_data['wind_speed']-sample_mean, axis=0),
@@ -517,17 +540,19 @@ def evaluate_pc_analysis(wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heig
                 x = np.array(range(eval_n_pc_up_to-2)) + 3
                 y_pc = n_pc_dependence[wind_orientation][diff_type][2:, 0, height_idx]
                 dy_pc = n_pc_dependence[wind_orientation][diff_type][2:, 1, height_idx]
-
+        
                 plt.xlabel('# pcs')
                 if diff_type == 'absolute':
                     plt.ylabel('{} diff for v {} in m/s'.format(diff_type, wind_orientation))
+                    plt.xlim((-1.5,1.5))
                 else:
                     plt.ylabel('{} diff for v {}'.format(diff_type, wind_orientation))
+                    plt.xlim((-0.6,0.6))
                 plt.title('{} diff of v {} at {} m'.format(diff_type, wind_orientation, height))
 
                 if len(eval_clusters) == 0:
                     # Plot detailed number of pcs dependence for only pc analysis
-                    plt.errorbar(x, y_pc, yerr=dy_pc, fmt='+', color='b')
+                    plt.errorbar(x, y_pc, yerr=dy_pc, fmt='+', color='tab:blue')
                     if wind_orientation in sample_mean_dict:
                         plt.text(plt.xlim()[1]*0.55, plt.ylim()[1]*0.8, 'mean: {:.2E} +- {:.2E}'.format(
                             sample_mean_dict[wind_orientation][diff_type][0][height_idx],
@@ -556,7 +581,7 @@ def evaluate_pc_analysis(wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heig
 
                     legend_list = [plot_item for key, plot_item in plot_dict.items()]
                     legend_names = ['{} clusters'.format(key) for key, plot_item in plot_dict.items()]
-                    pc = plt.errorbar(x+0.25, y_pc, yerr=dy_pc, fmt='+', color='b')
+                    pc = plt.errorbar(x+0.25, y_pc, yerr=dy_pc, fmt='+', color='tab:blue')
                     legend_list.insert(0, pc)
                     legend_names.insert(0, 'pc only')
                     plt.legend(legend_list, legend_names)
@@ -568,13 +593,56 @@ def evaluate_pc_analysis(wind_data, data_info, eval_pcs=[5, 6, 7, 21], eval_heig
 
 
 if __name__ == '__main__':
+    # Evaluate performance of pcs and nclusters
+    eval_clusters = [5, 8, 15, 30]
+    # Detailed analysis of specific npcs and heights
+    eval_pcs=[1, 2, 3, 4, 5, 7, 9, 12]
+    eval_heights=[300, 500, 600]
+    # Run analysis for all principal components up to
+    eval_n_pc_up_to=12
+    
+    if not plots_interactive:
+        # Check for result directories before analysis
+        cluster_result_dirs = [result_dir + '_'.join([str(eval_c), 'cluster']) for eval_c in eval_clusters]
+        for eval_c in eval_clusters: cluster_result_dirs.append(result_dir + '_'.join([str(eval_c), 'cluster']) + '/diff_vel_pdf')
+        cluster_result_dirs.append(result_dir + 'pc_only')
+        cluster_result_dirs.append(result_dir + 'pc_only' + '/diff_vel_pdf')
+        missing_dirs = False
+        for cluster_result_dir in cluster_result_dirs:
+            if not os.path.isdir(cluster_result_dir):
+                print('MISSING result dir:', cluster_result_dir)
+                missing_dirs = True
+                if make_result_subdirs:
+                    os.mkdir(cluster_result_dir)
+        if missing_dirs and not make_result_subdirs:
+            raise OSError('Missing result dirsectories for plots, add dirs and rerun, generate result dirs by setting make_result_subdirs to True') 
+
+    # Read wind data
     wind_data, data_info = get_wind_data()
     from preprocess_data import preprocess_data
-    wind_data = preprocess_data(wind_data)
+    wind_data_full = preprocess_data(wind_data, remove_low_wind_samples=False, normalize=do_normalize_data)
+    wind_data_cut = preprocess_data(wind_data, normalize=do_normalize_data)
 
-    # Evaluate performance of pcs and clusters
-    evaluate_pc_analysis(wind_data, data_info, eval_pcs=[3, 5, 7, 9, 12], eval_heights=[300, 500, 600],
-                         eval_clusters=[5, 8, 15, 30], eval_n_pc_up_to=12)
+    # non-normalized data : imitate data structure with norm factor set to 1
+    if not do_normalize_data:
+        wind_data_full['normalisation_value'] = np.zeros((wind_data_full['wind_speed'].shape[0])) + 1
+        wind_data_cut['normalisation_value'] = np.zeros((wind_data_cut['wind_speed'].shape[0])) + 1
+        wind_data_full['training_data'] = np.concatenate((wind_data_full['wind_speed_parallel'], wind_data_full['wind_speed_perpendicular']), 1)
+        wind_data_cut['training_data'] = np.concatenate((wind_data_cut['wind_speed_parallel'], wind_data_cut['wind_speed_perpendicular']), 1)
+
+    # Choose training and test(original) data combination depending on validation type
+    if validation_type == 'full_training_full_test':
+        training_data = wind_data_full
+        test_data = wind_data_full
+    elif validation_type == 'cut_training_full_test':
+        training_data = wind_data_cut
+        test_data = wind_data_full
+    elif validation_type == 'cut_training_cut_test':
+        training_data = wind_data_cut
+        test_data = wind_data_cut
+
+    evaluate_pc_analysis(training_data, test_data, data_info, eval_pcs=eval_pcs, eval_heights=eval_heights,
+                         eval_clusters=eval_clusters, eval_n_pc_up_to=eval_n_pc_up_to)
 
     if plots_interactive:
         plt.show()
