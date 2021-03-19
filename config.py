@@ -27,7 +27,20 @@ use_data = use_data_opts[0]
 
 # See plots interactively abs_wind_pc_relative_diff_vs_velocity_ranges_20_m_lat_52.85_lon_3.43_DOWA_2010_2017.pdf- don't save plots directly as pdf to result_dir
 plots_interactive = False
-result_dir = "../clustering_results/" + use_data + "/"
+result_dir = "/cephfs/user/s6lathim/clustering_results/" + use_data + "/"
+validation_type_opts = ['full_training_full_test', 'cut_training_full_test', 'cut_training_cut_test']
+validation_type = validation_type_opts[1]
+
+height_range_name_opts = ['DOWA_height_range', 'lin_height_range']
+height_range_name = height_range_name_opts[0]
+
+do_normalize_data = True
+if do_normalize_data:
+    result_dir = result_dir + validation_type + '/' + height_range_name + '/'
+else:
+    result_dir = result_dir + 'no_norm/' + validation_type + '/' + height_range_name + '/'
+
+make_result_subdirs = True
 
 
 start_year = 2010
@@ -40,7 +53,7 @@ longitude = 0
 
 # --------------------------- DOWA
 # data contains years 2008 to 2017
-DOWA_data_dir = "/gpfs/share/home/s6lathim/AWE/DOWA/"
+DOWA_data_dir = "/cephfs/user/s6lathim/DOWA/"
 # "/home/mark/WindData/DOWA/"  # '/media/mark/LaCie/DOWA/'
 
 location = {'i_lat': 110, 'i_lon': 55}
@@ -56,3 +69,6 @@ era5_grid_size = 1.  # 0.25
 read_model_level_up_to = 112
 height_range = [10.,  20.,  40.,  60.,  80., 100., 120., 140., 150., 160., 180.,
                 200., 220., 250., 300., 500., 600.]
+# Test linearized height range (ERA5 only)
+#height_range = [70.,  100., 140., 170., 200., 240., 270., 300., 340., 370.,
+#                400., 440., 470., 500., 540., 570., 600.]
