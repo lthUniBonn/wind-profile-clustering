@@ -364,9 +364,6 @@ def eval_all_pcs(n_features, eval_pcs, wind_data_training, wind_data, data_info,
 
                     # Plot PDFs: Distribution of differences for each height.
                     for height_idx, height in enumerate(heights):
-                        if n in [1, 2, 3, 4, 12] : 
-                            if height_idx == 0: print("    Excluding pc from pdf plotting, not needed for all evaluated pcs")
-                            continue
                         if height not in eval_heights:
                             continue
 
@@ -544,10 +541,10 @@ def evaluate_pc_analysis(wind_data_training, wind_data, data_info, eval_pcs=[5, 
                 plt.xlabel('# pcs')
                 if diff_type == 'absolute':
                     plt.ylabel('{} diff for v {} in m/s'.format(diff_type, wind_orientation))
-                    plt.xlim((-1.5,1.5))
+                    plt.ylim((-1.5,1.5))
                 else:
                     plt.ylabel('{} diff for v {}'.format(diff_type, wind_orientation))
-                    plt.xlim((-0.6,0.6))
+                    plt.ylim((-0.6,0.6))
                 plt.title('{} diff of v {} at {} m'.format(diff_type, wind_orientation, height))
 
                 if len(eval_clusters) == 0:
@@ -563,7 +560,7 @@ def evaluate_pc_analysis(wind_data_training, wind_data, data_info, eval_pcs=[5, 
                     plt.text(plt.xlim()[1]*0.55, plt.ylim()[1]*0.6, '#pc=2: {:.2E} +- {:.2E}'.format(
                         n_pc_dependence[wind_orientation][diff_type][1, 0, height_idx],
                         n_pc_dependence[wind_orientation][diff_type][1, 1, height_idx]))
-                    plt.savefig(result_dir + '{}_wind_{}_diff_vs_number_of_pcs_{}_m'.format(
+                    plt.savefig(result_dir + 'pc_only/{}_wind_{}_diff_vs_number_of_pcs_{}_m'.format(
                                 wind_orientation, diff_type, height) + data_info + '.pdf')
                     # Clear plots after saving, otherwise plotted on top of each other
                     plt.cla()
@@ -576,12 +573,13 @@ def evaluate_pc_analysis(wind_data_training, wind_data, data_info, eval_pcs=[5, 
                         dy = n_cluster_dependence[n_clusters][wind_orientation][diff_type][2:, 1, height_idx]
                         shift = -0.25 + 0.5/(len(n_cluster_dependence)) * n_cluster_idx
                         plot_dict[n_clusters] = plt.errorbar(x+shift, y, yerr=dy, fmt='+')
+
                     ax = plt.axes()
                     ax.set_xticks(x)
 
                     legend_list = [plot_item for key, plot_item in plot_dict.items()]
                     legend_names = ['{} clusters'.format(key) for key, plot_item in plot_dict.items()]
-                    pc = plt.errorbar(x+0.25, y_pc, yerr=dy_pc, fmt='+', color='tab:blue')
+                    pc = plt.errorbar(x+0.25, y_pc, yerr=dy_pc, fmt='+', color='b')
                     legend_list.insert(0, pc)
                     legend_names.insert(0, 'pc only')
                     plt.legend(legend_list, legend_names)
@@ -596,7 +594,7 @@ if __name__ == '__main__':
     # Evaluate performance of pcs and nclusters
     eval_clusters = [5, 8, 15, 30]
     # Detailed analysis of specific npcs and heights
-    eval_pcs=[1, 2, 3, 4, 5, 7, 9, 12]
+    eval_pcs=[2,3,4,5, 7, 9, 12]
     eval_heights=[300, 500, 600]
     # Run analysis for all principal components up to
     eval_n_pc_up_to=12
