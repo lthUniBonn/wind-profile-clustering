@@ -31,10 +31,10 @@ result_dir = "/cephfs/user/s6lathim/clustering_results/" + use_data + "/"
 validation_type_opts = ['full_training_full_test', 'cut_training_full_test', 'cut_training_cut_test']
 validation_type = validation_type_opts[1]
 
-height_range_name_opts = ['DOWA_height_range', 'lin_height_range']
+height_range_name_opts = ['DOWA_height_range'] #, 'lin_height_range']
 height_range_name = height_range_name_opts[0]
 
-do_normalize_data = True
+do_normalize_data = False #True
 if do_normalize_data:
     result_dir = result_dir + validation_type + '/' + height_range_name + '/'
 else:
@@ -67,6 +67,8 @@ surface_file_name_format = "{:d}_europe_{:d}_152.nc"  # 'sfc_{:d}_{:02d}.netcdf'
 era5_grid_size = 1.  # 0.25
 # Processing settings
 read_model_level_up_to = 112
+
+# DOWA height range
 height_range = [10.,  20.,  40.,  60.,  80., 100., 120., 140., 150., 160., 180.,
                 200., 220., 250., 300., 500., 600.]
 # Test linearized height range (ERA5 only)
