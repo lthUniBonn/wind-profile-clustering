@@ -22,7 +22,7 @@ Attributes:
 
 # --------------------------- GENERAL
 use_data_opts = ['DOWA', 'LIDAR', 'ERA5']
-use_data = use_data_opts[0]
+use_data = use_data_opts[2]
 
 
 # See plots interactively abs_wind_pc_relative_diff_vs_velocity_ranges_20_m_lat_52.85_lon_3.43_DOWA_2010_2017.pdf- don't save plots directly as pdf to result_dir
@@ -34,7 +34,7 @@ validation_type = validation_type_opts[1]
 height_range_name_opts = ['DOWA_height_range'] #, 'lin_height_range']
 height_range_name = height_range_name_opts[0]
 
-do_normalize_data = False #True
+do_normalize_data = True #False #
 if do_normalize_data:
     result_dir = result_dir + validation_type + '/' + height_range_name + '/'
 else:
@@ -61,10 +61,10 @@ location = {'i_lat': 110, 'i_lon': 55}
 
 # --------------------------- ERA5
 # General settings.
-era5_data_dir = '/cephfs/user/s6lathim/ERA5Data-redownload/'
+era5_data_dir = '/cephfs/user/s6lathim/ERA5Data/' #'-redownload/'
 model_level_file_name_format = "{:d}_europe_{:d}_130_131_132_133_135.nc"  # 'ml_{:d}_{:02d}.netcdf'
 surface_file_name_format = "{:d}_europe_{:d}_152.nc"  # 'sfc_{:d}_{:02d}.netcdf'
-era5_grid_size = 1.  # 0.25
+era5_grid_size = 0.25 #1.  #
 # Processing settings
 read_model_level_up_to = 112
 
