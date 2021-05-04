@@ -4,7 +4,7 @@ import numpy as np
 
 import matplotlib as mpl
 
-from config import plots_interactive, result_dir
+from config import plots_interactive, result_dir, data_info
 from read_requested_data import get_wind_data
 
 if not plots_interactive:
@@ -177,7 +177,7 @@ def analyse_pc(wind_data, loc_info=""):
 
 
 if __name__ == '__main__':
-    wind_data, data_info = get_wind_data()
+    wind_data = get_wind_data()
     from preprocess_data import preprocess_data
     wind_data = preprocess_data(wind_data)
     # Run principal component analysis

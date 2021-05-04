@@ -7,7 +7,8 @@ import os
 
 import matplotlib as mpl
 
-from config import plots_interactive, result_dir
+from config import plots_interactive, result_dir_validation, data_info
+
 from config import validation_type, do_normalize_data, make_result_subdirs
 
 if not plots_interactive:
@@ -156,10 +157,10 @@ def plot_height_vs_diffs(heights, wind_orientation, diff_type, n_pcs, plot_info,
 
     if not plots_interactive:
         if len(cluster_mean) != 0:
-            plt.savefig(result_dir + '{}_cluster/{}_wind_{}_cluster_{}_diff_vs_height_{}_pcs'.format(
+            plt.savefig(result_dir_validation + '{}_cluster/{}_wind_{}_cluster_{}_diff_vs_height_{}_pcs'.format(
                 n_clusters, wind_orientation, n_clusters, diff_type, n_pcs) + plot_info + '.pdf')
         else:
-            plt.savefig(result_dir + 'pc_only/{}_wind_{}_diff_vs_height_{}_pcs'.format(
+            plt.savefig(result_dir_validation + 'pc_only/{}_wind_{}_diff_vs_height_{}_pcs'.format(
                 wind_orientation, diff_type, n_pcs) + plot_info + '.pdf')
 
         # Clear plots after saving, otherwise plotted on top of each other
@@ -384,7 +385,7 @@ def eval_all_pcs(n_features, eval_pcs, wind_data_training, wind_data, data_info,
                                 cluster_value = cluster_val[:, height_idx][vel_mask]
                                 vel_res[wind_orientation]['cluster'][diff_type][eval_heights.index(height), eval_pcs.index(n), vel_idx, :] = (np.mean(cluster_value), np.std(cluster_value))
                                 plot_diff_pdf(cluster_value, wind_orientation, diff_type,
-                                              output_file_name=(result_dir + '{}_cluster/diff_vel_pdf/{}_wind_{}_cluster_{}_diff_pdf_height_{}_{}_pcs'.format(
+                                              output_file_name=(result_dir_validation + '{}_cluster/diff_vel_pdf/{}_wind_{}_cluster_{}_diff_pdf_height_{}_{}_pcs'.format(
                                                   n_clusters, wind_orientation, n_clusters, diff_type, height, n) + vel_tag + data_info + '.pdf'),
                                               title=' '.join(vel_tag.split('_')) + ' cluster {} difference {} wind data with {} pcs at {} m'.format(
                                                   diff_type, wind_orientation, n, height))
@@ -392,7 +393,7 @@ def eval_all_pcs(n_features, eval_pcs, wind_data_training, wind_data, data_info,
                                 pc_value = pc_val[:, height_idx][vel_mask]
                                 vel_res[wind_orientation]['pc'][diff_type][eval_heights.index(height), eval_pcs.index(n), vel_idx, :] = (np.mean(pc_value), np.std(pc_value))
                                 plot_diff_pdf(pc_value, wind_orientation, diff_type,
-                                              output_file_name=(result_dir + 'pc_only/diff_vel_pdf/{}_wind_{}_diff_pdf_height_{}_{}_pcs'.format(
+                                              output_file_name=(result_dir_validation + 'pc_only/diff_vel_pdf/{}_wind_{}_diff_pdf_height_{}_{}_pcs'.format(
                                                   wind_orientation, diff_type, height, n) + vel_tag + data_info + '.pdf'),
                                               title=' '.join(vel_tag.split('_')) + ' {} difference {} wind data with {} pcs at {} m'.format(
                                                   diff_type, wind_orientation, n, height))
@@ -458,11 +459,11 @@ def eval_all_pcs(n_features, eval_pcs, wind_data_training, wind_data, data_info,
                     plt.legend(legend_list, legend_names)
                     if n_clusters > 0:
                         plt.title('{} diff of v {} at {} m using {} {}'.format(diff_type, wind_orientation, height, n_clusters, fit_type))
-                        plt.savefig(result_dir + '{}_cluster/{}_wind_{}_{}_{}_diff_vs_velocity_ranges_{}_m'.format(
+                        plt.savefig(result_dir_validation + '{}_cluster/{}_wind_{}_{}_{}_diff_vs_velocity_ranges_{}_m'.format(
                                     n_clusters, wind_orientation, n_clusters, fit_type, diff_type, height) + data_info + '.pdf')
                     else:
                         plt.title('{} diff of v {} at {} m using {}'.format(diff_type, wind_orientation, height, fit_type))
-                        plt.savefig(result_dir + 'pc_only/{}_wind_{}_{}_diff_vs_velocity_ranges_{}_m'.format(
+                        plt.savefig(result_dir_validation + 'pc_only/{}_wind_{}_{}_diff_vs_velocity_ranges_{}_m'.format(
                                     wind_orientation, fit_type, diff_type, height) + data_info + '.pdf')
                     # Clear plots after saving, otherwise plotted on top of each other
                     plt.cla()
@@ -560,7 +561,7 @@ def evaluate_pc_analysis(wind_data_training, wind_data, data_info, eval_pcs=[5, 
                     plt.text(plt.xlim()[1]*0.55, plt.ylim()[1]*0.6, '#pc=2: {:.2E} +- {:.2E}'.format(
                         n_pc_dependence[wind_orientation][diff_type][1, 0, height_idx],
                         n_pc_dependence[wind_orientation][diff_type][1, 1, height_idx]))
-                    plt.savefig(result_dir + 'pc_only/{}_wind_{}_diff_vs_number_of_pcs_{}_m'.format(
+                    plt.savefig(result_dir_validation + 'pc_only/{}_wind_{}_diff_vs_number_of_pcs_{}_m'.format(
                                 wind_orientation, diff_type, height) + data_info + '.pdf')
                     # Clear plots after saving, otherwise plotted on top of each other
                     plt.cla()
@@ -583,7 +584,7 @@ def evaluate_pc_analysis(wind_data_training, wind_data, data_info, eval_pcs=[5, 
                     legend_list.insert(0, pc)
                     legend_names.insert(0, 'pc only')
                     plt.legend(legend_list, legend_names)
-                    plt.savefig(result_dir + '{}_wind_cluster_{}_diff_vs_number_of_pcs_{}_m'.format(
+                    plt.savefig(result_dir_validation + '{}_wind_cluster_{}_diff_vs_number_of_pcs_{}_m'.format(
                                 wind_orientation, diff_type, height) + data_info + '.pdf')
                     # Clear plots after saving, otherwise plotted on top of each other
                     plt.cla()
@@ -601,10 +602,10 @@ if __name__ == '__main__':
     
     if not plots_interactive:
         # Check for result directories before analysis
-        cluster_result_dirs = [result_dir + '_'.join([str(eval_c), 'cluster']) for eval_c in eval_clusters]
-        for eval_c in eval_clusters: cluster_result_dirs.append(result_dir + '_'.join([str(eval_c), 'cluster']) + '/diff_vel_pdf')
-        cluster_result_dirs.append(result_dir + 'pc_only')
-        cluster_result_dirs.append(result_dir + 'pc_only' + '/diff_vel_pdf')
+        cluster_result_dirs = [result_dir_validation + '_'.join([str(eval_c), 'cluster']) for eval_c in eval_clusters]
+        for eval_c in eval_clusters: cluster_result_dirs.append(result_dir_validation + '_'.join([str(eval_c), 'cluster']) + '/diff_vel_pdf')
+        cluster_result_dirs.append(result_dir_validation + 'pc_only')
+        cluster_result_dirs.append(result_dir_validation + 'pc_only' + '/diff_vel_pdf')
         missing_dirs = False
         for cluster_result_dir in cluster_result_dirs:
             if not os.path.isdir(cluster_result_dir):
@@ -616,7 +617,7 @@ if __name__ == '__main__':
             raise OSError('Missing result dirsectories for plots, add dirs and rerun, generate result dirs by setting make_result_subdirs to True') 
 
     # Read wind data
-    wind_data, data_info = get_wind_data()
+    wind_data = get_wind_data()
     from preprocess_data import preprocess_data
     wind_data_full = preprocess_data(wind_data, remove_low_wind_samples=False, normalize=do_normalize_data)
     wind_data_cut = preprocess_data(wind_data, normalize=do_normalize_data)

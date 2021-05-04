@@ -85,5 +85,5 @@ def preprocess_data(data, remove_low_wind_samples=True, return_copy=True, normal
 
 if __name__ == '__main__':
     # Read data
-    wind_data, loc_info = get_wind_data()
+    wind_data = get_wind_data()
     preprocess_data(wind_data)

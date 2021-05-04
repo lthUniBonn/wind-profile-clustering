@@ -7,7 +7,7 @@ from os.path import join as path_join
 
 from config import use_data, start_year, final_year, latitude , longitude, \
                    DOWA_data_dir, location, \
-                   era5_data_dir, model_level_file_name_format, surface_file_name_format, read_model_level_up_to, era5_grid_size, height_range
+                   era5_data_dir, model_level_file_name_format, surface_file_name_format, read_model_level_up_to, height_range
 
 from era5_ml_height_calc import compute_level_heights
 
@@ -106,19 +106,7 @@ def get_wind_data_era5(heights_of_interest, lat=40, lon=1, start_year=2010, fina
 
 
 def get_wind_data():
-    # Get actual lat/lon from chosen DOWA indices - change this in the future to the other way around? TODO
-    from read_data.dowa import lats_dowa_grid, lons_dowa_grid
-    lat = lats_dowa_grid[location['i_lat'], location['i_lon']]
-    lon = lons_dowa_grid[location['i_lat'], location['i_lon']]
-    # round to grid spacing in ERA5 data
-    latitude = round(lat/era5_grid_size)*era5_grid_size
-    longitude = round(lon/era5_grid_size)*era5_grid_size
-
-    data_info = '_lat_{:2.2f}_lon_{:2.2f}'.format(latitude,longitude)
-
     if use_data == 'DOWA':
-        data_info = '_lat_{:2.2f}_lon_{:2.2f}'.format(lat,lon) # part of FIX 
-
         import os
         #HDF5 library has been updated (1.10.1) (netcdf uses HDF5 under the hood)
         #file system does not support the file locking that the HDF5 library uses.
@@ -141,20 +129,16 @@ def get_wind_data():
         wind_data['n_samples'] = len(data_range)
         wind_data['years'] = (start_year, final_year)
 
-        data_info += "_DOWA_{}_{}".format(start_year, final_year)
-
         print(len(hours))
         print(len(wind_data['wind_speed_east']), wind_data['n_samples'])
     elif use_data == 'LIDAR':
         from read_data.fgw_lidar import read_data
         wind_data = read_data()
-        data_info += "_LIDAR"
 
     elif use_data == 'ERA5':
         wind_data = get_wind_data_era5(height_range, lat=latitude, lon=longitude, start_year=start_year, final_year=final_year, max_level=read_model_level_up_to)
-        data_info += "_era5_{}_{}_grid_{}".format(start_year, final_year, era5_grid_size)
     else:
         raise ValueError("Wrong data type specified: {} - no option to read data is executed".format(use_data))
 
-    return wind_data, data_info
+    return wind_data
 
