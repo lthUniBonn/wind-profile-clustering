@@ -2,11 +2,11 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.pipeline import make_pipeline
 import numpy as np
-import pandas as pd
+
 import copy
 import matplotlib as mpl
 
-from config import plots_interactive, result_dir
+from config import n_pcs, n_clusters, plots_interactive, result_dir, data_info
 
 if not plots_interactive:
     mpl.use('Pdf')
@@ -170,7 +170,7 @@ def visualise_patterns(n_clusters, wind_data, sample_labels, frequency_clusters,
     ax_bars[0].set_xticklabels(range(1, n_clusters+1))
     ax_bars[-1].set_xlabel('Cluster label')
 
-    viridis = copy(plt.get_cmap('viridis'))
+    viridis = copy.copy(plt.get_cmap('viridis'))
     viridis.set_bad(color='white')
 
     # Study yearly (grouped) variation.
@@ -336,55 +336,21 @@ def predict_cluster(training_data, n_clusters, predict_fun, cluster_mapping):
 
     return labels, frequency_clusters
 
-def export_to_csv(suffix, i_profile, h, prl, prp, scale_factor):
-    """Write wind profile shapes resulting from the clustering to csv."""
-    df = {
-        'h [m]': h,
-        'u1 [-]': prl,
-        'v1 [-]': prp,
-        'scale factor1 [-]': scale_factor,
-    }
-    df = pd.DataFrame(df)
-    df.to_csv('wind_resource/'+'clustering_profile{}{}.csv'.format(suffix, i_profile), index=False, sep=";")
-    # TODO normalisation value?? 
-    # TODO naming? -> location, data_type (ERA5), output_dir: BUDDY  -> input params to qsm chain
-
-
 if __name__ == '__main__':
-    wind_data, data_info = get_wind_data()
+    wind_data = get_wind_data()
     from preprocess_data import preprocess_data
     processed_data = preprocess_data(wind_data)
 
-    n_clusters = 8
-    res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters)
+    res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters, n_pcs)
     prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
     plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5, plot_info=data_info)
     visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'], plot_info=data_info)
     projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'], plot_info=data_info)
 
-    # write clustering output to csv
-    for cluster_idx in range(n_clusters):
-        export_to_csv(n_clusters, cluster_idx+1, processed_data['altitude'], prl[cluster_idx], prp[cluster_idx], processed_data['normalisation_value'])
-        # TODO what is needed in qsm? again normal wind, or still wrt 100m wind direction?
-
     processed_data_full = preprocess_data(wind_data, remove_low_wind_samples=False)
     labels, frequency_clusters = predict_cluster(processed_data_full['training_data'], n_clusters,
                                                  res['data_processing_pipeline'].predict, res['cluster_mapping'])
     
-    
-    
-    # TODO write frequency distribution to pickle
-        #def export_results(self, file_name):
-        #export_dict = self.__dict__
-        ## for k, v in export_dict.items():
-        ##     if isinstance(v, np.ndarray):
-        ##         export_dict[k] = v.copy().tolist()
-        #with open(file_name, 'wb') as f:
-        #    pickle.dump(export_dict, f)
-        #100
-        #freq_2d
-        #v_bin_limits
-
     # plot cluster frequency for filtered and dull datasets 
     fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
     plt.subplots_adjust(top=.9, hspace=.3)
