@@ -28,42 +28,96 @@ plots_interactive = False
 n_clusters = 8 # default: 8
 n_pcs = 5 # default: 5
 
-location_type = 'mmc' #TODO multiple locations/data info change
-
-
-
-
 # ----------------------------------------------------------------
 # -------------------------------- DATA - config input/output
 # ----------------------------------------------------------------
 
 # --------------------------- TIME --------------------------------------
 start_year = 2010
-final_year = 2017
+final_year = 2010
+
+# Only read data from January to year_final_month | useful for testing on small amounts of data
+year_final_month = 12 #default: 12
 
 # --------------------------- LOCATION ----------------------------------
-# Single location processing
-#latitude = 0
-#longitude = 0
-# TODO: get dowa indices by lat/lon - for now: DOWA loc indices used for both
-location = {'i_lat': 110, 'i_lon': 55}
+# Location processing (latitude, longitude)
+#locations = [(40,1), (41,2)] #(40,1.25),
+#location_type = 'test_mult_locations'
+
+#from location_selection import training_locations10 as locations
+#location_type = 'training_grid_small_test'
+
+#from location_selection import training_locations100 as locations
+#location_type = 'training_grid_large_test'
+
+#-------- 1x1
+from location_selection import training_locations10_1x1 as locations
+location_type = 'training_grid_small_test_1x1'
+
+#from location_selection import training_locations100_1x1 as locations
+#location_type = 'training_grid_large_test_1x1'
+
+#from location_selection import training_locations1000_1x1 as locations
+#location_type = 'training_grid_very_large_test_1x1'
+
+#import numpy as np
+#locations = np.round([(52.85,3.43)])
+#location_type = 'mmc_1x1'
+
+#-----------
+
+#locations = [(52.85,3.43)]
+#location_type = 'mmc'
+
+
+if year_final_month == 1:
+    location_type += '_january'
+if year_final_month == 2:
+    location_type += '_february'
+
+
+
+#TODO include special places here? -- to be read as single locations and processed each
 
 # --------------------------- DATASET INPUT ------------------------------
 # Choose dataset
-use_data_opts = ['DOWA', 'LIDAR', 'ERA5']
-use_data = use_data_opts[0]
+use_data_opts = ['DOWA', 'LIDAR', 'ERA5', 'ERA5_1x1']
+use_data = use_data_opts[3]
 
 # --------------------------- DOWA
 # DOWA data contains years 2008 to 2017
 DOWA_data_dir = "/cephfs/user/s6lathim/DOWA/"
 # "/home/mark/WindData/DOWA/"  # '/media/mark/LaCie/DOWA/'
 
+#TODO test multiple locations input DOWA
+
 # --------------------------- ERA5
 # General settings
-era5_data_dir = '/cephfs/user/s6lathim/ERA5Data/' #'-redownload/'
-model_level_file_name_format = "{:d}_europe_{:d}_130_131_132_133_135.nc"  # 'ml_{:d}_{:02d}.netcdf'
+if use_data == 'ERA5_1x1':
+    era5_data_dir = '/cephfs/user/s6lathim/ERA5Data-redownload/'
+    import numpy as np
+    lats=list(np.arange(65,29,-1)) #65 to 30
+    lons=list(np.arange(-20,21,1)) #-20 to 20
+    i_locations = [(lats.index(lat), lons.index(lon)) for lat,lon in locations]
+else:
+    era5_data_dir = '/cephfs/user/s6lathim/ERA5Data/' 
+    import numpy as np
+    lats=list(np.arange(65,29.75,-.25)) #65 to 30
+    lons=list(np.arange(-20,20.25,.25)) #-20 to 20
+    i_locations = [(lats.index(lat), lons.index(lon)) for lat,lon in locations]
+
+
+# ----------- ERA5 input format
+era5_data_input_formats = ['monthly', 'loc_box', 'sinlge_loc']
+era5_data_input_format = era5_data_input_formats[0]
+
+# ---- monthly and loc_box use:
 surface_file_name_format = "{:d}_europe_{:d}_152.nc"  # 'sfc_{:d}_{:02d}.netcdf'
-era5_grid_size = 0.25 #1.  
+model_level_file_name_format = "{:d}_europe_{:d}_130_131_132_133_135.nc"  # 'ml_{:d}_{:02d}.netcdf'
+
+# ---- single location files
+latitude_ds_file_name = era5_data_dir + 'loc_files/europe_{}_{}'.format(start_year, final_year) + '_i_lat_{i_lat}_i_lon_{i_lon}.nc'
+
 # Processing settings
 read_model_level_up_to = 112
 
@@ -72,26 +126,20 @@ read_model_level_up_to = 112
 result_dir = "/cephfs/user/s6lathim/clustering_results/" + use_data + "/"
 
 # --------------------------- FILE SUFFIX
-# Get actual lat/lon from chosen DOWA indices - change this in the future to the other way around in read_data?# TODO
-#from read_data.dowa import lats_dowa_grid, lons_dowa_grid
-lat = 52.85 # lats_dowa_grid[location['i_lat'], location['i_lon']]
-lon = 3.43 # lons_dowa_grid[location['i_lat'], location['i_lon']]
-
-data_info = '_lat_{:2.2f}_lon_{:2.2f}_{}_{}_{}'.format(lat, lon, use_data, start_year, final_year)
-# round to grid spacing in ERA5 data # TODO 
-latitude = round(lat/era5_grid_size)*era5_grid_size
-longitude = round(lon/era5_grid_size)*era5_grid_size
-if use_data == 'ERA5':
-    
-    data_info = '_lat_{:2.2f}_lon_{:2.2f}_{}_{}_{}_grid_{}'.format(lat, lon, use_data, start_year, final_year, era5_grid_size)
-
+if len(locations) == 1:
+    lat, lon = locations[0]
+    data_info = '_lat_{:2.2f}_lon_{:2.2f}_{}_{}_{}'.format(lat, lon, use_data, start_year, final_year)
+else:
+    data_info = '_mult_loc_{}_{}_{}'.format(use_data, start_year, final_year)
 
 # --------------------------- CLUSTERING OUTPUT
-cluster_config = '{}{}'.format(n_clusters, location_type)
-
-file_name_profiles = result_dir + 'cluster_wind_profile_shapes_{}{}.csv'.format(cluster_config, data_info)
-file_name_freq_distr = result_dir + 'freq_distribution_{}{}.pickle'.format(cluster_config, data_info)
-cut_wind_speeds_file = result_dir + 'cut_in_out_{}{}.pickle'.format(cluster_config, data_info)
+config_setting = '{}{}'.format(n_clusters, location_type)
+data_info = config_setting + data_info
+file_name_profiles = result_dir + 'cluster_wind_profile_shapes_{}.csv'.format(data_info)
+file_name_freq_distr = result_dir + 'freq_distribution_{}.pickle'.format(data_info)
+file_name_cluster_labels = result_dir + 'cluster_labels_{}.pickle'.format(data_info)
+file_name_cluster_pipeline = result_dir + 'cluster_pipeline_{}.pickle'.format(data_info)
+cut_wind_speeds_file = result_dir + 'cut_in_out_{}.csv'.format(data_info)
 # Mark # cut_wind_speeds_file = '/home/mark/Projects/quasi-steady-model-sandbox/wind_resource/cut_in_out_8mmc.pickle'
 
 
