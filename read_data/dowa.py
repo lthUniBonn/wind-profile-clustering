@@ -89,8 +89,15 @@ def read_data(grid_points={'coords': (52.85, 3.44)}, data_dir='DOWA/'):
         vw_east, vw_north, dts, alts = read_netcdf(k, l, data_dir)
     elif 'iy' in grid_points and 'ix' in grid_points:
         vw_east, vw_north, dts, alts = read_netcdf(grid_points['iy']-1, grid_points['ix']-1, data_dir)
-    elif 'ids' in grid_points:  # Mulitple locations.
-        i_lats, i_lons = grid_points['ids'][0], grid_points['ids'][1]
+    elif 'ids' in grid_points or 'mult_coords' in grid_points:  # Mulitple locations.
+        if 'ids' in grid_points:
+            i_lats, i_lons = grid_points['ids'][0], grid_points['ids'][1]
+        elif 'mult_coords' in grid_points:  # Mulitple locations given as list of [(lat,lon), (lat1,lon1)].
+            i_lats, i_lons = [], []
+            for loc in grid_points['mult_coords']:
+                i_lat, i_lon = find_closest_dowa_grid_point(*loc)
+                i_lats.append(i_lat)
+                i_lons.append(i_lon)
         n_locs = len(i_lats)
 
         first_iter = True
