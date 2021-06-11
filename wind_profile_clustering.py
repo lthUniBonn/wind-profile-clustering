@@ -344,7 +344,7 @@ if __name__ == '__main__':
     res = cluster_normalized_wind_profiles_pca(processed_data['training_data'], n_clusters, n_pcs)
     prl, prp = res['clusters_feature']['parallel'], res['clusters_feature']['perpendicular']
     plot_wind_profile_shapes(processed_data['altitude'], prl, prp, (prl ** 2 + prp ** 2) ** .5, plot_info=data_info)
-    visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'], plot_info=data_info)
+    #visualise_patterns(n_clusters, processed_data, res['sample_labels'], res['frequency_clusters'], plot_info=data_info)
     projection_plot_of_clusters(res['training_data_pc'], res['sample_labels'], res['clusters_pc'], plot_info=data_info)
 
     processed_data_full = preprocess_data(wind_data, remove_low_wind_samples=False)
