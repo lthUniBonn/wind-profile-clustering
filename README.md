@@ -19,7 +19,14 @@ conda activate [env_name]
 
 Finally, run the script to perform the clustering:
 
-```
+```commandline
 python wind_profile_clustering.py
 ```
-
+The export of the clustering results is performed by running the script:
+```commandline
+python export_profiles_and_probabilit.py -p
+```
+When cut-in and cut-out wind speeds are given, the respective frequency distributions are exported via
+```commandline
+python export_profiles_and_probabilit.py -f
+```
