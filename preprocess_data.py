@@ -40,8 +40,11 @@ def reduce_wind_data(data, mask_keep):
     n_samples_after_filter = np.sum(mask_keep)
     print("{:.1f}% of data/{} samples remain after filtering.".format(n_samples_after_filter/data['n_samples'] * 100.,
                                                                       n_samples_after_filter))
+    skip_filter = ['altitude', 'n_samples', 'n_locs', 'years', 'n_samples_per_loc', 'locations']
+    from config import locations
+    if len(locations) > 1: skip_filter += ['datetime'] #datetime for all locations the same -> masking for all locations at the same time cannot be applied this way - fix: save datetime*len(locations) the same datetime for all locations TODO?
     for k, val in data.items():
-        if k in ['altitude', 'n_samples', 'n_locs', 'years']:
+        if k in skip_filter: 
             continue
         else:
             data[k] = val[mask_keep]
