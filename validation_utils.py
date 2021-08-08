@@ -8,9 +8,9 @@ import pickle
 
 import matplotlib as mpl
 
-from config import plots_interactive, result_dir_validation, data_info
+from config_clustering import plots_interactive, result_dir_validation, data_info
 
-from config import validation_type, do_normalize_data, make_result_subdirs
+from config_clustering import validation_type, do_normalize_data, make_result_subdirs
 
 if not plots_interactive:
     mpl.use('Pdf')
@@ -417,19 +417,19 @@ def eval_all_pcs(n_features, eval_pcs, wind_data_training, wind_data, data_info,
             mask = np.zeros_like(wind_data['wind_speed'])
             for height_idx, height in enumerate(heights):
                 wind_speed = wind_data['wind_speed'][:, height_idx]
-                mask[:,height_idx] = (wind_speed >= vel) * (wind_speed < split_velocities[vel_idx+1])
-    
-            for wind_orientation in cluster_full_diffs:
-                diffs_sel_velocity_cluster[wind_orientation] = {}
+                mask[:,height_idx] = (wind_speed >= sel_velocity[0]) * (wind_speed < sel_velocity[1])
+            for wind_orientation in pc_full_diffs:
+                if n_clusters > 0: diffs_sel_velocity_cluster[wind_orientation] = {}
                 diffs_sel_velocity_pc[wind_orientation] = {}
-                for diff_type, val in cluster_full_diffs[wind_orientation].items():
+                for diff_type, val in pc_full_diffs[wind_orientation].items():
                     #mask for each height the velocity range
-                    diff_vals_cluster = ma.masked_array(val, mask)
-                    diff_vals_pc = ma.array(pc_full_diffs[wind_orientation][diff_type], mask) 
-                    diffs_sel_velocity_cluster[wind_orientation][diff_type] = (np.mean(diff_vals_cluster, axis=0), np.std(diff_vals_cluster, axis=0))
+                    if n_clusters > 0: 
+                        diff_vals_cluster = ma.array(cluster_full_diffs[wind_orientation][diff_type], mask=mask)
+                        diffs_sel_velocity_cluster[wind_orientation][diff_type] = (np.mean(diff_vals_cluster, axis=0), np.std(diff_vals_cluster, axis=0))
+                    diff_vals_pc = ma.masked_array(val, mask=mask)
                     diffs_sel_velocity_pc[wind_orientation][diff_type] = (np.mean(diff_vals_pc, axis=0), np.std(diff_vals_pc, axis=0))
     
-            cluster_differences = diffs_sel_velocity_cluster
+            if n_clusters > 0: cluster_differences = diffs_sel_velocity_cluster
             pc_differences = diffs_sel_velocity_pc
 
         # ---- Fill result dictionary with n pc analysis results
