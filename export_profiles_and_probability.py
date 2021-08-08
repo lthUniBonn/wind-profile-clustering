@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import getopt
 
-from config import n_clusters, n_pcs, file_name_profiles, cut_wind_speeds_file, file_name_freq_distr,\
+from config_clustering import n_clusters, n_pcs, file_name_profiles, cut_wind_speeds_file, file_name_freq_distr,\
     file_name_cluster_labels, file_name_cluster_pipeline
 from read_requested_data import get_wind_data
 

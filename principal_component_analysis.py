@@ -4,7 +4,7 @@ import numpy as np
 
 import matplotlib as mpl
 
-from config import plots_interactive, result_dir, data_info, n_pcs
+from config_clustering import plots_interactive, result_dir, data_info, n_pcs
 from read_requested_data import get_wind_data
 
 if not plots_interactive:

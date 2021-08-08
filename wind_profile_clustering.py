@@ -6,7 +6,7 @@ import numpy as np
 import copy
 import matplotlib as mpl
 
-from config import n_pcs, n_clusters, plots_interactive, result_dir, data_info
+from config_clustering import n_pcs, n_clusters, plots_interactive, result_dir, data_info
 
 if not plots_interactive:
     mpl.use('Pdf')
