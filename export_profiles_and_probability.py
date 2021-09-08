@@ -91,7 +91,7 @@ def interpret_input_args():
         help = """
         python export_profiles_and_probability.py                  : run clustering, save both profiles and frequency distributions
         python export_profiles_and_probability.py -p               : run clustering, save new profiles
-        python export_profiles_and_probability.py -f               : run clustering, save new frequency distributions 
+        python export_profiles_and_probability.py -f               : export frequency distributions 
         python export_profiles_and_probability.py -h               : display this help
         """
         try:
