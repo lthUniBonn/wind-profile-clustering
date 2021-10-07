@@ -90,13 +90,7 @@ location_type = 'all_locs'
 # from location_selection import training_locations1000_1x1 as locations
 # location_type = 'training_grid_very_large_test_1x1'
 
-
-
-if year_final_month == 1:
-    location_type += '_january'
-elif year_final_month == 2:
-    location_type += '_february'
-elif year_final_month < 12:
+if year_final_month < 12:
     location_type += 'up_to_month_{}'.format(year_final_month)
 
 # TODO include special places here?
