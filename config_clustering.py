@@ -42,13 +42,22 @@ final_year = 2020
 year_final_month = 12  # default: 12
 
 # --------------------------- LOCATION ----------------------------------
-locations = []
-location_type = 'all_locs'
+n_locs = -1 # -1: all, -2: manual
+if n_locs == -1:
+    locations = []
+    location_type = 'all_locs'
+elif n_locs == 5000:
+    from location_selection import locations_europe_5000 as locations
+    location_type = '5000_locs'
+elif n_locs == 1000:
+    from location_selection import locations_europe_1000 as locations
+    location_type = '1000_locs'
+elif n_locs == 2:
+    # TODO include import of single locations here?
+    locations = [(40,-1), (40,1.25)]
+    location_type = 'test_mult_locations'
 
-# Location processing (latitude, longitude)
-# locations = [(40,-1), (41,2)] #(40,1.25),
-# location_type = 'test_mult_locations'
-
+# !!! old, remove?
 # Location processing (latitude, longitude)
 # locations = [(58.25,-12.5), (63.0,-12.5), (61.25, -14.5)] #(40,1.25),
 # location_type = 'test_mult_locations'
@@ -79,7 +88,6 @@ location_type = 'all_locs'
 # locations = [(52.85,3.43)]
 # location_type = 'mmc'
 
-
 # -------- 1x1
 # from location_selection import training_locations10_1x1 as locations
 # location_type = 'training_grid_small_test_1x1'
@@ -92,8 +100,6 @@ location_type = 'all_locs'
 
 if year_final_month < 12:
     location_type += 'up_to_month_{}'.format(year_final_month)
-
-# TODO include special places here?
 
 # --------------------------- DATASET INPUT ------------------------------
 # Choose dataset
