@@ -29,6 +29,8 @@ plots_interactive = False
 n_clusters = 8  # default: 8
 n_pcs = 5  # default: 5
 
+location_type_training, start_year_training, final_year_training = \
+    '5000_locs', 2010, 2020
 # ----------------------------------------------------------------
 # -------------------------------- DATA - config input/output
 # ----------------------------------------------------------------
@@ -42,7 +44,7 @@ final_year = 2020
 year_final_month = 12  # default: 12
 
 # --------------------------- LOCATION ----------------------------------
-n_locs = -1 # -1: all, -2: manual
+n_locs = -1  # -1: all, -2: manual
 if n_locs == -1:
     locations = []
     location_type = 'all_locs'
@@ -52,11 +54,24 @@ elif n_locs == 5000:
 elif n_locs == 1000:
     from location_selection import locations_europe_1000 as locations
     location_type = '1000_locs'
-elif n_locs == 2:
+elif n_locs == 100:
+    from location_selection import locations_europe_5000 as locations
+    locations = locations[4900:]
+    location_type = '100_locs_predict'
+elif n_locs == 22:
     # TODO include import of single locations here?
-    locations = [(40,-1), (40,1.25)]
-    location_type = 'test_mult_locations'
-
+    locations = [(55.5, 3.25), (50, 13.5)]
+    location_type = 'test_2_locations_22'
+elif n_locs == 12:
+    # TODO include import of single locations here?
+    locations = [(55.5, 3.25)]
+    location_type = 'test_2_locations_12'
+elif n_locs == 21:
+    # TODO include import of single locations here?
+    locations = [(50, 13.5)]
+    location_type = 'test_2_locations_21'
+    # plus alpes -> south of bodensee
+    # cabauw netherlands and north denmark
 # !!! old, remove?
 # Location processing (latitude, longitude)
 # locations = [(58.25,-12.5), (63.0,-12.5), (61.25, -14.5)] #(40,1.25),
@@ -152,10 +167,10 @@ model_level_file_name_format = "{:d}_europe_{:d}_130_131_132_133_135.nc"
 # ---- single location files
 # latitude_ds_file_name = era5_data_dir + 'loc_files/europe_{}_{}'.format(
 #       start_year, final_year) + '_i_lat_{i_lat}_i_lon_{i_lon}.nc'
-# latitude_ds_file_name_idx = era5_data_dir + 'cdo_single_loc/time_combined/' +
-#    'europe_2010_2020_130_131_132_133_135_{i_lat:05d}.nc'  # {i_lon:05d}.nc'
-# latitude_ds_file_name_idx_monthly = era5_data_dir +
-#   'cdo_single_loc/{year}_europe_{month}_130_131_132_133_135.nc{i_lat:05d}.nc'
+latitude_ds_file_name_idx = (era5_data_dir + 'cdo_single_loc/time_combined/' +
+   'europe_2010_2020_130_131_132_133_135_{i_lat:05d}.nc')  # {i_lon:05d}.nc'
+latitude_ds_file_name_idx_monthly = (era5_data_dir +
+   'cdo_single_loc/{year}_europe_{month}_130_131_132_133_135.nc{i_lat:05d}.nc')
 
 latitude_ds_file_name = (era5_data_dir + 'cdo_single_loc/time_combined/'
                          + 'loc-wise/europe_2010_2020_130_131_132_133_135'
@@ -172,17 +187,18 @@ result_dir = "/cephfs/user/s6lathim/clustering_results/" + use_data + "/"
 # --------------------------- FILE SUFFIX
 if len(locations) == 1:
     lat, lon = locations[0]
-    data_info = '_lat_{:2.2f}_lon_{:2.2f}_{}_{}_{}'.format(lat, lon,
+    data_info = 'lat_{:2.2f}_lon_{:2.2f}_{}_{}_{}'.format(lat, lon,
                                                            use_data,
                                                            start_year,
                                                            final_year)
 else:
-    data_info = '_mult_loc_{}_{}_{}'.format(use_data, start_year, final_year)
+    data_info = '_{}_{}_{}'.format(use_data, start_year, final_year)
 
 # --------------------------- CLUSTERING OUTPUT
-config_setting = '{}{}'.format(n_clusters, location_type)
+config_setting = '{}_clusters_{}'.format(n_clusters, location_type)
 data_info = config_setting + data_info
-file_name_profiles = (
+
+file_name_cluster_profiles = (
     result_dir + 'cluster_wind_profile_shapes_{}.csv'.format(data_info))
 file_name_freq_distr = (
     result_dir + 'freq_distribution_{}.pickle'.format(data_info))
@@ -191,7 +207,24 @@ file_name_cluster_labels = (
 file_name_cluster_pipeline = (
     result_dir + 'cluster_pipeline_{}.pickle'.format(data_info))
 cut_wind_speeds_file = (
-    result_dir + 'cut_in_out_{}.csv'.format(data_info))
+    result_dir + 'cut_in_out_{}_estimate.csv'.format(data_info))
+
+data_info_training = '{}_clusters_{}_{}_{}_{}'.format(n_clusters,
+                                              location_type_training,
+                                              use_data,
+                                              start_year_training,
+                                              final_year_training)
+training_cluster_profiles = (
+    result_dir + 'cluster_wind_profile_shapes_{}.csv'.format(
+        data_info_training))
+training_cluster_pipeline = (
+    result_dir + 'cluster_pipeline_{}.pickle'.format(data_info_training))
+training_cluster_labels = (
+    result_dir + 'cluster_labels_{}.pickle'.format(data_info_training))
+training_cut_wind_speeds_file = (
+    result_dir + 'cut_in_out_{}_estimate.csv'.format(data_info_training))
+training_refined_cut_wind_speeds_file = training_cut_wind_speeds_file.replace(
+    'estimate','refined')
 # Alternatives:
 #  cut_wind_speeds_file = (
 #  '/home/mark/Projects/quasi-steady-model-sandbox/wind_resource/'
