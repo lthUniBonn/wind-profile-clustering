@@ -3,6 +3,7 @@
 
 import xarray as xr
 import numpy as np
+import sys
 from os.path import join as path_join
 
 try:
@@ -17,6 +18,7 @@ from config_clustering import use_data, start_year, final_year, year_final_month
 
 from config_clustering import all_lats, all_lons # i_locations
 from config_clustering import latitude_ds_file_name_idx, latitude_ds_file_name_idx_monthly
+# FIXME what of this is still necessary?
 
 import dask
 # only as many threads as requested CPUs | only one to be requested, more threads don't seem to be used
@@ -159,83 +161,124 @@ def read_ds_single_loc_files(lat, lon, by_index=False, time_combined=True, sel_s
     #print(ds)
     return ds
 
-def get_wind_data_era5(heights_of_interest, locations=[(40,1)], start_year=2010, final_year=2010, max_level=112,
-                       era5_data_input_format='monthly', sel_sample_ids=[]):
+
+def eval_single_loc_era5_input(sel_sample_ids, i_highest_level, levels, n_per_loc, heights_of_interest, loc_i_loc):
+    # TODO improve arguments!
+    lat, lon,  i_lat, i_lon = loc_i_loc
+    if era5_data_input_format == 'single_loc':
+        ds = read_ds_single_loc_files(lat, lon, sel_sample_ids=sel_sample_ids)
+
+    # Extract wind data for single location
+    v_levels_east = ds['u'][:, i_highest_level:, i_lat, i_lon].values
+    v_levels_north = ds['v'][:, i_highest_level:, i_lat, i_lon].values
+
+    t_levels = ds['t'][:, i_highest_level:, i_lat, i_lon].values  # TODO test -- better to call values later? or all together at beginning?
+    q_levels = ds['q'][:, i_highest_level:, i_lat, i_lon].values
+
+    try:
+        surface_pressure = ds.variables['sp'][:, i_lat, i_lon].values
+    except KeyError:
+        surface_pressure = np.exp(ds.variables['lnsp'][:, i_lat, i_lon].values)
+
+
+    # Calculate model level height
+    level_heights, density_levels = compute_level_heights(levels,
+                                                          surface_pressure,
+                                                          t_levels,
+                                                          q_levels)
+    # Determine wind at altitudes of interest by
+    # means of interpolating the raw wind data.
+
+    # Interpolation results array.
+    v_req_alt_east_loc = np.zeros((n_per_loc, len(heights_of_interest)))
+    v_req_alt_north_loc = np.zeros((n_per_loc, len(heights_of_interest)))
+
+    for i_hr in range(n_per_loc):
+        if not np.all(level_heights[i_hr, 0] > heights_of_interest):
+            raise ValueError("Requested height ({:.2f} m) is higher than \
+                             height of highest model level."
+                             .format(level_heights[i_hr, 0]))
+        v_req_alt_east_loc[i_hr, :] = np.interp(heights_of_interest,
+                                                level_heights[i_hr, ::-1],
+                                                v_levels_east[i_hr, ::-1])
+        v_req_alt_north_loc[i_hr, :] = np.interp(heights_of_interest,
+                                                 level_heights[i_hr, ::-1],
+                                                 v_levels_north[i_hr, ::-1])
+    #print('Location: ', lat, lon, ' read in.')
+    return(v_req_alt_east_loc, v_req_alt_north_loc)
+
+
+def get_wind_data_era5(heights_of_interest,
+                       locations=[(40, 1)],
+                       start_year=2010, final_year=2010, max_level=112,
+                       era5_data_input_format='monthly', sel_sample_ids=[],
+                       parallel=False):
     lat, lon = locations[0]
-    ds, lons, lats, levels, hours, i_highest_level = read_raw_data(start_year, final_year, year_final_month=year_final_month, sel_sample_ids=sel_sample_ids, lat0=lat, lon0=lon)
-    i_highest_level = list(levels).index(max_level)
+    ds, lons, lats, levels, hours, i_highest_level = read_raw_data(
+        start_year, final_year, year_final_month=year_final_month,
+        sel_sample_ids=sel_sample_ids, lat0=lat, lon0=lon)
+    n_per_loc = len(hours)
 
     if era5_data_input_format != 'single_loc':
         # Convert lat/lon lists to indices
         lats, lons = (list(lats), list(lons))
-        i_locs = [(lats.index(lat), lons.index(lon)) for lat,lon in locations]
+        i_locs = [(lats.index(lat), lons.index(lon)) for lat, lon in locations]
 
     else:
-        print('Processing single location input')
-        i_locs = [(0, 0) for lat,lon in locations]
+        # print('Processing single location input')
+        i_locs = [(0, 0) for lat, lon in locations]
 
-    v_req_alt_east = np.zeros((len(hours)*len(locations), len(heights_of_interest))) #TODO will this be too large?
-    v_req_alt_north = np.zeros((len(hours)*len(locations), len(heights_of_interest)))
+    v_req_alt_east = np.zeros((n_per_loc*len(locations),
+                               len(heights_of_interest)))
+    v_req_alt_north = np.zeros((n_per_loc*len(locations),
+                                len(heights_of_interest)))
+    n_cores = 23  # TODO make n optional
+    if parallel:
+        from multiprocessing import Pool
+        from tqdm import tqdm
+        loc_i_loc_combinations = [(locations[i][0], locations[i][1],
+                                   i_loc[0], i_loc[1])
+                                  for i, i_loc in enumerate(i_locs)]
+        import functools
+        funct = functools.partial(eval_single_loc_era5_input, sel_sample_ids,
+                                  i_highest_level, levels, n_per_loc,
+                                  heights_of_interest)
+        with Pool(n_cores) as p:
+            results = list(tqdm(p.imap(funct, loc_i_loc_combinations),
+                                total=len(loc_i_loc_combinations),
+                                file=sys.stdout)) # TODO stdout optional
+            # TODO is this more RAM intensive?
+            for i, val in enumerate(results):
+                v_req_alt_east_loc, v_req_alt_north_loc = val
+                v_req_alt_east[n_per_loc*i:n_per_loc*(i+1), :] = \
+                    v_req_alt_east_loc
+                v_req_alt_north[n_per_loc*i:n_per_loc*(i+1), :] = \
+                    v_req_alt_north_loc
+    else:
+        # Not parallelized version:
+        for i, i_loc in enumerate(i_locs):
+            i_lat, i_lon = i_loc
+            lat, lon = locations[i]
+            v_req_alt_east_loc, v_req_alt_north_loc = \
+                eval_single_loc_era5_input(
+                    sel_sample_ids, i_highest_level,
+                    levels, n_per_loc, heights_of_interest,
+                    (lat, lon, i_lat, i_lon))
 
-    #TODO possible in parallel? I/O cap anyways? not best way for connected areas? -- test
+            v_req_alt_east[n_per_loc*i:n_per_loc*(i+1), :] = v_req_alt_east_loc
+            v_req_alt_north[n_per_loc*i:n_per_loc*(i+1), :] = \
+                v_req_alt_north_loc
 
-    for i, i_loc in enumerate(i_locs):
-        print(i, i_loc, '-----------------------------------')
-        i_lat, i_lon = i_loc
-        lat, lon = locations[i]
-
-        if era5_data_input_format == 'single_loc' and i>0: # Read next location file
-            ds = read_ds_single_loc_files(lat, lon, sel_sample_ids=sel_sample_ids)
-
-        # Extract wind data for single location
-        v_levels_east = ds['u'][:, i_highest_level:, i_lat, i_lon].values
-        v_levels_north = ds['v'][:, i_highest_level:, i_lat, i_lon].values
-
-        t_levels = ds['t'][:, i_highest_level:, i_lat, i_lon].values #TODO test -- better to call values later? or all together at beginning?
-        q_levels = ds['q'][:, i_highest_level:, i_lat, i_lon].values
-
-        try:
-            surface_pressure = ds.variables['sp'][:, i_lat, i_lon].values
-        except KeyError:
-            surface_pressure = np.exp(ds.variables['lnsp'][:, i_lat, i_lon].values)
-
-
-        # Calculate model level height
-        level_heights, density_levels = compute_level_heights(levels,
-                                                              surface_pressure,
-                                                              t_levels,
-                                                              q_levels)
-        # Determine wind at altitudes of interest by
-        # means of interpolating the raw wind data.
-
-        # Interpolation results array.
-        v_req_alt_east_loc = np.zeros((len(hours), len(heights_of_interest)))
-        v_req_alt_north_loc = np.zeros((len(hours), len(heights_of_interest)))
-
-
-        for i_hr in range(len(hours)):
-            if not np.all(level_heights[i_hr, 0] > heights_of_interest):
-                raise ValueError("Requested height ({:.2f} m) is higher than \
-                                 height of highest model level."
-                                 .format(level_heights[i_hr, 0]))
-            v_req_alt_east_loc[i_hr, :] = np.interp(heights_of_interest,
-                                                    level_heights[i_hr, ::-1],
-                                                    v_levels_east[i_hr, ::-1])
-            v_req_alt_north_loc[i_hr, :] = np.interp(heights_of_interest,
-                                                     level_heights[i_hr, ::-1],
-                                                     v_levels_north[i_hr, ::-1])
-
-        v_req_alt_east[len(hours)*i:len(hours)*(i+1), :] = v_req_alt_east_loc
-        v_req_alt_north[len(hours)*i:len(hours)*(i+1), :] = v_req_alt_north_loc
-
-        #if era5_data_input_format == 'single_loc': # Close dataset - free resources? #TODO
+        # if era5_data_input_format == 'single_loc':
+        # Close dataset - free resources? #TODO
         #    ds.close()
-
-    wind_data = { #TODO This could get too large for a large number of locations - better use an xarray structure here?
+    # TODO This could get too large for a large number of locations
+    # - better use an xarray structure here?
+    wind_data = {
         'wind_speed_east': v_req_alt_east,
         'wind_speed_north': v_req_alt_north,
-        'n_samples': len(hours)*len(i_locs),
-        'n_samples_per_loc': len(hours),
+        'n_samples': n_per_loc*len(i_locs),
+        'n_samples_per_loc': n_per_loc,
         'datetime': ds['time'].values,
         'altitude': heights_of_interest,
         'years': (start_year, final_year),
@@ -245,8 +288,11 @@ def get_wind_data_era5(heights_of_interest, locations=[(40,1)], start_year=2010,
     return wind_data
 
 
-def get_wind_data(sel_sample_ids=[], locs=[]): #TODO add single sample selection for all data types
-    if len(locs) == 0: locs = locations # Use configuration locations
+def get_wind_data(sel_sample_ids=[], locs=[], parallel=False):
+    # TODO add single sample selection for all data types
+    if len(locs) == 0:
+        # Use all configuration locations
+        locs = locations
 
     if use_data == 'DOWA':
         import os
@@ -278,8 +324,11 @@ def get_wind_data(sel_sample_ids=[], locs=[]): #TODO add single sample selection
         wind_data = read_data()
 
     elif use_data in ['ERA5', 'ERA5_1x1']:
-        wind_data = get_wind_data_era5(height_range, locations=locs, start_year=start_year, final_year=final_year,
-                                       max_level=read_model_level_up_to,  era5_data_input_format=era5_data_input_format, sel_sample_ids=sel_sample_ids)
+        wind_data = get_wind_data_era5(
+            height_range, locations=locs, start_year=start_year,
+            final_year=final_year, max_level=read_model_level_up_to,
+            era5_data_input_format=era5_data_input_format,
+            sel_sample_ids=sel_sample_ids, parallel=parallel)
     else:
         raise ValueError("Wrong data type specified: {} - no option to read data is executed".format(use_data))
 
